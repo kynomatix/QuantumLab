@@ -1,7 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { useLocation, useSearch } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import Editor from "@monaco-editor/react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -236,23 +235,13 @@ export default function Setup() {
               </div>
             </div>
             <div className="h-[400px]">
-              <Editor
-                height="100%"
-                defaultLanguage="javascript"
-                theme="vs-dark"
+              <textarea
+                className="w-full h-full bg-[#1e1e1e] text-[#d4d4d4] font-mono text-[13px] p-3 rounded border border-border resize-none focus:outline-none focus:ring-1 focus:ring-primary leading-relaxed"
                 value={code}
-                onChange={(val) => setCode(val || "")}
-                options={{
-                  minimap: { enabled: false },
-                  fontSize: 13,
-                  lineNumbers: "on",
-                  scrollBeyondLastLine: false,
-                  wordWrap: "on",
-                  padding: { top: 12, bottom: 12 },
-                  renderLineHighlight: "none",
-                  fontFamily: "'JetBrains Mono', monospace",
-                }}
+                onChange={(e) => setCode(e.target.value)}
+                spellCheck={false}
                 data-testid="editor-pine-script"
+                placeholder="Paste your Pine Script strategy code here..."
               />
             </div>
           </Card>

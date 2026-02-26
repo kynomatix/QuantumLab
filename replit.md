@@ -16,10 +16,10 @@ This app is a companion service to **myquantumvault.com** (QuantumVault), a plat
 **Why this matters:** Every strategy deployed without proper backtesting is a risk of capital loss. This tool is the quality gate between strategy generation and live deployment.
 
 ## Architecture
-- **Frontend**: React + Vite + Tailwind CSS (dark theme), Monaco Editor, Recharts
+- **Frontend**: React + Vite + Tailwind CSS (dark theme), plain textarea for Pine Script, Recharts
 - **Backend**: Express.js (TypeScript)
 - **Database**: PostgreSQL (Drizzle ORM) - strategies, optimization runs, results
-- **Data**: ccxt library for Binance USD-M Futures public OHLCV data (no API key needed)
+- **Data**: Direct Gate.io REST API (https://api.gateio.ws/api/v4/futures/usdt/candlesticks) with Kraken fallback - no API keys needed
 - **Storage**: PostgreSQL for persistence, in-memory for active job state, file system cache for OHLCV data
 
 ## Key Features
@@ -56,7 +56,7 @@ Tables defined in `server/schema.ts` (Drizzle ORM). Shared client-compatible typ
 - `server/engine.ts` - Bar-by-bar backtesting engine with squeeze momentum strategy
 - `server/indicators.ts` - Technical indicators (SMA, EMA, WMA, Hull MA, BB, KC, RSI, ADX, ATR, LinReg, Volume, Squeeze)
 - `server/optimizer.ts` - Random search + refinement optimization engine
-- `server/datafeed.ts` - ccxt OHLCV data fetcher with disk caching
+- `server/datafeed.ts` - Gate.io/Kraken REST API OHLCV data fetcher with disk caching
 - `server/storage.ts` - DatabaseStorage class with PostgreSQL + in-memory job state
 - `server/db.ts` - PostgreSQL connection via Drizzle ORM
 
@@ -93,3 +93,5 @@ Dark trading terminal aesthetic with:
 1. Date range inputs in Pine Script strategies are automatically detected and excluded from the optimization parameter space. The date range is set via the UI date pickers and is treated as a fixed configuration, never modified by the optimizer.
 2. Drizzle table definitions live in `server/schema.ts` (not shared/) to avoid bundling `drizzle-orm/pg-core` into the client. Shared types are plain TypeScript interfaces.
 3. The app is designed to eventually serve as an API backend for QuantumVault, handling optimization requests from both users and AI agents.
+4. `process.on("SIGHUP", () => {})` in server/index.ts is critical - the Replit environment sends SIGHUP ~60s after process start, which would kill the server without this handler.
+5. Uses direct Gate.io REST API calls instead of ccxt (56MB saved). Binance/Bybit are geo-blocked from Replit's US servers.
