@@ -81,6 +81,12 @@ export default {
           busy: "rgb(239 68 68)",
           offline: "rgb(156 163 175)",
         },
+        trading: {
+          profit: "#26a69a",
+          loss: "#ef5350",
+          warning: "#ff9800",
+          info: "#2196f3",
+        },
       },
       fontFamily: {
         sans: ["var(--font-sans)"],
