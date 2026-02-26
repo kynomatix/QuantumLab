@@ -1,13 +1,14 @@
 # Flux Momentum Backtester & Optimizer
 
 ## Overview
-Web application for backtesting and optimizing Pine Script trading strategies against Binance USD-M futures OHLCV data. Dark-themed trading terminal aesthetic.
+Web application for backtesting and optimizing Pine Script trading strategies against Binance USD-M futures OHLCV data. Dark-themed trading terminal aesthetic with PostgreSQL persistence for building a strategy library over time.
 
 ## Architecture
 - **Frontend**: React + Vite + Tailwind CSS (dark theme), Monaco Editor, Recharts
 - **Backend**: Express.js (TypeScript)
+- **Database**: PostgreSQL (Drizzle ORM) - strategies, optimization runs, results
 - **Data**: ccxt library for Binance USD-M Futures public OHLCV data (no API key needed)
-- **Storage**: In-memory for job state, file system cache for OHLCV data
+- **Storage**: PostgreSQL for persistence, in-memory for active job state, file system cache for OHLCV data
 
 ## Key Features
 1. Pine Script parser extracts input.int/float/bool/string/time declarations
@@ -17,34 +18,52 @@ Web application for backtesting and optimizing Pine Script trading strategies ag
 5. Real-time progress via SSE (Server-Sent Events)
 6. Results dashboard with equity curves, trade logs, config tables
 7. CSV export
+8. Strategy library - save/load/manage strategies with persistent optimization history
+9. Historical run results - view past optimization runs and their best configs
+
+## Database Schema
+- `strategies` - Saved Pine Script strategies with parsed inputs
+- `optimization_runs` - Records of each optimization run (config, status, dates)
+- `optimization_results` - Individual results per ticker/timeframe combo per run
 
 ## File Structure
 ### Frontend
-- `client/src/App.tsx` - Main app with routing and header
-- `client/src/pages/Setup.tsx` - Pine Script editor, ticker/TF/date selection, parsed params display
+- `client/src/App.tsx` - Main app with routing, navigation header (Setup, Strategies)
+- `client/src/pages/Setup.tsx` - Pine Script editor, ticker/TF/date selection, save strategy, parsed params display
 - `client/src/pages/Running.tsx` - Real-time optimization progress dashboard
-- `client/src/pages/Results.tsx` - Results dashboard with summary cards, config table, equity curve, trade log
+- `client/src/pages/Results.tsx` - Live results dashboard with summary cards, config table, equity curve, trade log
+- `client/src/pages/Strategies.tsx` - Strategy library with saved strategies and their run history
+- `client/src/pages/HistoryResults.tsx` - View saved optimization run results from database
 
 ### Backend
-- `server/routes.ts` - API endpoints (parse, run, progress SSE, results, export)
+- `server/routes.ts` - API endpoints (parse, run, progress SSE, results, export, strategies CRUD, runs)
 - `server/pine-parser.ts` - Pine Script input declaration parser
 - `server/engine.ts` - Bar-by-bar backtesting engine with squeeze momentum strategy
 - `server/indicators.ts` - Technical indicators (SMA, EMA, WMA, Hull MA, BB, KC, RSI, ADX, ATR, LinReg, Volume, Squeeze)
 - `server/optimizer.ts` - Random search + refinement optimization engine
 - `server/datafeed.ts` - ccxt OHLCV data fetcher with disk caching
-- `server/storage.ts` - In-memory job state management
+- `server/storage.ts` - DatabaseStorage class with PostgreSQL + in-memory job state
+- `server/db.ts` - PostgreSQL connection via Drizzle ORM
 
 ### Shared
-- `shared/schema.ts` - TypeScript types, Zod schemas, constants (tickers, timeframes)
+- `shared/schema.ts` - Drizzle tables, TypeScript types, Zod schemas, constants
 
 ## API Endpoints
 - `GET /api/tickers` - List available tickers
 - `POST /api/parse-pine` - Parse Pine Script, return extracted parameters
-- `POST /api/run-optimization` - Start optimization job (returns jobId)
+- `POST /api/run-optimization` - Start optimization job (returns jobId, runId)
 - `GET /api/job/:id/progress` - SSE stream of progress updates
 - `GET /api/job/:id/results` - Get final optimization results
 - `POST /api/job/:id/cancel` - Cancel running job
 - `GET /api/export/csv/:id` - Download results as CSV
+- `GET /api/strategies` - List saved strategies
+- `GET /api/strategies/:id` - Get strategy by ID
+- `POST /api/strategies` - Create new strategy
+- `PATCH /api/strategies/:id` - Update strategy
+- `DELETE /api/strategies/:id` - Delete strategy
+- `GET /api/runs` - List optimization runs (optional ?strategyId filter)
+- `GET /api/runs/:id` - Get run details
+- `GET /api/runs/:id/results` - Get saved results for a run
 
 ## Theme
 Dark trading terminal aesthetic with:

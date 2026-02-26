@@ -3,7 +3,7 @@ import type { Server } from "http";
 import { storage } from "./storage";
 import { parsePineScript } from "./pine-parser";
 import { runOptimization } from "./optimizer";
-import { optimizationConfigSchema, AVAILABLE_TICKERS } from "@shared/schema";
+import { optimizationConfigSchema, insertStrategyBodySchema, updateStrategyBodySchema, AVAILABLE_TICKERS } from "@shared/schema";
 import { log } from "./index";
 
 export async function registerRoutes(
@@ -29,7 +29,88 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/run-optimization", (req: Request, res: Response) => {
+  app.get("/api/strategies", async (_req: Request, res: Response) => {
+    try {
+      const list = await storage.getStrategies();
+      res.json(list);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/strategies/:id", async (req: Request, res: Response) => {
+    try {
+      const strategy = await storage.getStrategy(parseInt(req.params.id));
+      if (!strategy) return res.status(404).json({ error: "Strategy not found" });
+      res.json(strategy);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/strategies", async (req: Request, res: Response) => {
+    try {
+      const parsed = insertStrategyBodySchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+      const strategy = await storage.createStrategy(parsed.data);
+      res.json(strategy);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.patch("/api/strategies/:id", async (req: Request, res: Response) => {
+    try {
+      const parsed = updateStrategyBodySchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+      const strategy = await storage.updateStrategy(parseInt(req.params.id), parsed.data);
+      if (!strategy) return res.status(404).json({ error: "Strategy not found" });
+      res.json(strategy);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/strategies/:id", async (req: Request, res: Response) => {
+    try {
+      await storage.deleteStrategy(parseInt(req.params.id));
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/runs", async (req: Request, res: Response) => {
+    try {
+      const strategyId = req.query.strategyId ? parseInt(req.query.strategyId as string) : undefined;
+      const runs = await storage.getRuns(strategyId);
+      res.json(runs);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/runs/:id", async (req: Request, res: Response) => {
+    try {
+      const run = await storage.getRun(parseInt(req.params.id));
+      if (!run) return res.status(404).json({ error: "Run not found" });
+      res.json(run);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/runs/:id/results", async (req: Request, res: Response) => {
+    try {
+      const results = await storage.getRunResults(parseInt(req.params.id));
+      if (!results.length) return res.status(404).json({ error: "No results found" });
+      res.json(results);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/run-optimization", async (req: Request, res: Response) => {
     try {
       const parsed = optimizationConfigSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -39,14 +120,44 @@ export async function registerRoutes(
       const config = parsed.data;
       const job = storage.createJob(config);
 
+      let runId: number | undefined;
+      if (config.strategyId) {
+        const run = await storage.createRun({
+          strategyId: config.strategyId,
+          tickers: config.tickers,
+          timeframes: config.timeframes,
+          startDate: config.startDate,
+          endDate: config.endDate,
+          randomSamples: config.randomSamples,
+          topK: config.topK,
+          refinementsPerSeed: config.refinementsPerSeed,
+          minTrades: config.minTrades,
+          maxDrawdownCap: config.maxDrawdownCap,
+          mode: config.mode,
+          status: "running",
+        });
+        runId = run.id;
+        job.runId = runId;
+      }
+
       runOptimization(
         config,
         (progress) => storage.updateProgress(job.id, progress),
         job.id,
         job.abortSignal
-      ).then((results) => {
+      ).then(async (results) => {
         storage.setResults(job.id, results);
-      }).catch((err) => {
+        if (runId) {
+          try {
+            await storage.saveResults(runId, results);
+            const totalSamples = config.randomSamples + config.topK * config.refinementsPerSeed;
+            const combos = config.tickers.length * config.timeframes.length;
+            await storage.completeRun(runId, totalSamples * combos);
+          } catch (err: any) {
+            log(`Failed to save results to DB: ${err.message}`);
+          }
+        }
+      }).catch(async (err) => {
         log(`Optimization error: ${err.message}`);
         storage.updateProgress(job.id, {
           jobId: job.id,
@@ -58,9 +169,12 @@ export async function registerRoutes(
           elapsed: 0,
           error: err.message,
         });
+        if (runId) {
+          try { await storage.failRun(runId); } catch {}
+        }
       });
 
-      res.json({ jobId: job.id });
+      res.json({ jobId: job.id, runId });
     } catch (err: any) {
       log(`Run error: ${err.message}`);
       res.status(500).json({ error: err.message });
@@ -104,7 +218,7 @@ export async function registerRoutes(
   });
 
   app.get("/api/job/:id/results", (req: Request, res: Response) => {
-    const results = storage.getResults(req.params.id);
+    const results = storage.getJobResult(req.params.id);
     if (!results) {
       return res.status(404).json({ error: "Results not found" });
     }
@@ -117,7 +231,7 @@ export async function registerRoutes(
   });
 
   app.get("/api/export/csv/:id", (req: Request, res: Response) => {
-    const results = storage.getResults(req.params.id);
+    const results = storage.getJobResult(req.params.id);
     if (!results) {
       return res.status(404).json({ error: "Results not found" });
     }

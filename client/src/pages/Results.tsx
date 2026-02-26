@@ -15,7 +15,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
   ResponsiveContainer, Area, AreaChart,
 } from "recharts";
-import type { OptimizationResult, BacktestResult, TradeRecord } from "@shared/schema";
+import type { JobResult, BacktestResult, TradeRecord } from "@shared/schema";
 
 type SortKey = "netProfitPercent" | "winRatePercent" | "maxDrawdownPercent" | "profitFactor" | "totalTrades";
 type SortDir = "asc" | "desc";
@@ -28,7 +28,7 @@ export default function Results() {
   const [expandedCombo, setExpandedCombo] = useState<string | null>(null);
   const [tradeSort, setTradeSort] = useState<{ key: keyof TradeRecord; dir: SortDir }>({ key: "entryTime", dir: "desc" });
 
-  const { data: results, isLoading, error } = useQuery<OptimizationResult>({
+  const { data: results, isLoading, error } = useQuery<JobResult>({
     queryKey: ["/api/job", params.jobId, "results"],
     queryFn: async () => {
       const res = await fetch(`/api/job/${params.jobId}/results`);

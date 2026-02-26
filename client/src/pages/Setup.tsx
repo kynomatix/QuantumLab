@@ -1,5 +1,6 @@
-import { useState, useCallback } from "react";
-import { useLocation } from "wouter";
+import { useState, useCallback, useEffect } from "react";
+import { useLocation, useSearch } from "wouter";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import Editor from "@monaco-editor/react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,12 +11,12 @@ import { Progress } from "@/components/ui/progress";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
   Code2, Play, Rocket, ChevronDown, Calendar, Settings2, Lock,
-  TrendingUp, Gauge, BarChart3, Loader2, CheckCircle2, AlertCircle,
+  TrendingUp, Gauge, BarChart3, Loader2, CheckCircle2, AlertCircle, Save,
 } from "lucide-react";
-import type { PineInput, PineParseResult } from "@shared/schema";
+import type { PineInput, PineParseResult, Strategy } from "@shared/schema";
 import { AVAILABLE_TICKERS, AVAILABLE_TIMEFRAMES } from "@shared/schema";
 
 const EXAMPLE_PINE = `// Paste your Pine Script strategy here
@@ -32,8 +33,13 @@ const EXAMPLE_PINE = `// Paste your Pine Script strategy here
 
 export default function Setup() {
   const [, navigate] = useLocation();
+  const searchStr = useSearch();
+  const searchParams = new URLSearchParams(searchStr);
+  const strategyIdParam = searchParams.get("strategyId");
   const { toast } = useToast();
   const [code, setCode] = useState(EXAMPLE_PINE);
+  const [strategyName, setStrategyName] = useState("");
+  const [strategyId, setStrategyId] = useState<number | null>(strategyIdParam ? parseInt(strategyIdParam) : null);
   const [parsedResult, setParsedResult] = useState<PineParseResult | null>(null);
   const [isParsing, setIsParsing] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
@@ -48,6 +54,59 @@ export default function Setup() {
   const [maxDrawdown, setMaxDrawdown] = useState(85);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const { data: loadedStrategy } = useQuery<Strategy>({
+    queryKey: ["/api/strategies", strategyIdParam],
+    queryFn: async () => {
+      const res = await fetch(`/api/strategies/${strategyIdParam}`);
+      if (!res.ok) throw new Error("Strategy not found");
+      return res.json();
+    },
+    enabled: !!strategyIdParam,
+  });
+
+  useEffect(() => {
+    if (loadedStrategy) {
+      setCode(loadedStrategy.pineScript);
+      setStrategyName(loadedStrategy.name);
+      setStrategyId(loadedStrategy.id);
+      setParsedResult({
+        inputs: loadedStrategy.parsedInputs as PineInput[],
+        groups: (loadedStrategy.groups as Record<string, string>) ?? {},
+        strategySettings: (loadedStrategy.strategySettings as any) ?? {},
+      });
+    }
+  }, [loadedStrategy]);
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      if (!parsedResult) throw new Error("Parse first");
+      const name = strategyName.trim() || "Untitled Strategy";
+      const body = {
+        name,
+        pineScript: code,
+        parsedInputs: parsedResult.inputs,
+        groups: parsedResult.groups,
+        strategySettings: parsedResult.strategySettings,
+      };
+      if (strategyId) {
+        const res = await apiRequest("PATCH", `/api/strategies/${strategyId}`, body);
+        return res.json();
+      } else {
+        const res = await apiRequest("POST", "/api/strategies", body);
+        return res.json();
+      }
+    },
+    onSuccess: (strategy: Strategy) => {
+      setStrategyId(strategy.id);
+      setStrategyName(strategy.name);
+      queryClient.invalidateQueries({ queryKey: ["/api/strategies"] });
+      toast({ title: strategyId ? "Strategy updated" : "Strategy saved" });
+    },
+    onError: (err: any) => {
+      toast({ title: "Failed to save", description: err.message, variant: "destructive" });
+    },
+  });
 
   const handleParse = useCallback(async () => {
     if (!code.trim() || code === EXAMPLE_PINE) {
@@ -120,6 +179,7 @@ export default function Setup() {
         minTrades,
         maxDrawdownCap: maxDrawdown,
         mode,
+        strategyId: strategyId ?? undefined,
       });
       const { jobId } = await res.json();
       navigate(`/running/${jobId}`);
@@ -141,19 +201,39 @@ export default function Setup() {
         <div className="lg:col-span-2 space-y-6">
           <Card className="p-0 overflow-hidden">
             <div className="flex items-center justify-between gap-1 px-4 py-3 border-b border-border/50">
-              <div className="flex items-center gap-2">
-                <Code2 className="w-4 h-4 text-primary" />
-                <span className="text-sm font-medium">Pine Script</span>
+              <div className="flex items-center gap-2 flex-1 min-w-0">
+                <Code2 className="w-4 h-4 text-primary flex-shrink-0" />
+                <Input
+                  value={strategyName}
+                  onChange={(e) => setStrategyName(e.target.value)}
+                  placeholder="Strategy name..."
+                  className="h-7 text-sm border-none bg-transparent px-1 max-w-[200px]"
+                  data-testid="input-strategy-name"
+                />
               </div>
-              <Button
-                size="sm"
-                onClick={handleParse}
-                disabled={isParsing}
-                data-testid="button-parse"
-              >
-                {isParsing ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <CheckCircle2 className="w-3 h-3 mr-1" />}
-                {isParsing ? "Parsing..." : "Parse Script"}
-              </Button>
+              <div className="flex items-center gap-2">
+                {parsedResult && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => saveMutation.mutate()}
+                    disabled={saveMutation.isPending}
+                    data-testid="button-save-strategy"
+                  >
+                    {saveMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Save className="w-3 h-3 mr-1" />}
+                    {strategyId ? "Update" : "Save"}
+                  </Button>
+                )}
+                <Button
+                  size="sm"
+                  onClick={handleParse}
+                  disabled={isParsing}
+                  data-testid="button-parse"
+                >
+                  {isParsing ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <CheckCircle2 className="w-3 h-3 mr-1" />}
+                  {isParsing ? "Parsing..." : "Parse Script"}
+                </Button>
+              </div>
             </div>
             <div className="h-[400px]">
               <Editor

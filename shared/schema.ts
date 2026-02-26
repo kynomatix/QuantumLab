@@ -1,5 +1,62 @@
 import { z } from "zod";
 
+export interface Strategy {
+  id: number;
+  name: string;
+  description: string | null;
+  pineScript: string;
+  parsedInputs: unknown;
+  groups: unknown;
+  strategySettings: unknown;
+  createdAt: string;
+}
+
+export interface OptimizationRun {
+  id: number;
+  strategyId: number;
+  tickers: unknown;
+  timeframes: unknown;
+  startDate: string;
+  endDate: string;
+  randomSamples: number;
+  topK: number;
+  refinementsPerSeed: number;
+  minTrades: number;
+  maxDrawdownCap: number;
+  mode: string;
+  status: string;
+  totalConfigsTested: number | null;
+  createdAt: string;
+  completedAt: string | null;
+}
+
+export interface OptResult {
+  id: number;
+  runId: number;
+  ticker: string;
+  timeframe: string;
+  rank: number;
+  netProfitPercent: number;
+  winRatePercent: number;
+  maxDrawdownPercent: number;
+  profitFactor: number;
+  totalTrades: number;
+  params: unknown;
+  trades: unknown;
+  equityCurve: unknown;
+}
+
+export const insertStrategyBodySchema = z.object({
+  name: z.string().min(1),
+  description: z.string().nullable().optional(),
+  pineScript: z.string().min(1),
+  parsedInputs: z.any(),
+  groups: z.any().optional(),
+  strategySettings: z.any().optional(),
+});
+
+export const updateStrategyBodySchema = insertStrategyBodySchema.partial();
+
 export interface PineInput {
   name: string;
   type: "int" | "float" | "bool" | "string" | "time";
@@ -37,6 +94,7 @@ export interface OptimizationConfig {
   minTrades: number;
   maxDrawdownCap: number;
   mode: "smoke" | "sweep";
+  strategyId?: number;
 }
 
 export interface TradeRecord {
@@ -86,8 +144,9 @@ export interface JobProgress {
   }>;
 }
 
-export interface OptimizationResult {
+export interface JobResult {
   jobId: string;
+  runId?: number;
   configs: BacktestResult[];
   totalConfigsTested: number;
   bestByCombo: Record<string, BacktestResult[]>;
@@ -123,7 +182,5 @@ export const optimizationConfigSchema = z.object({
   minTrades: z.number().default(10),
   maxDrawdownCap: z.number().default(85),
   mode: z.enum(["smoke", "sweep"]),
+  strategyId: z.number().optional(),
 });
-
-export type InsertUser = { username: string; password: string };
-export type User = { id: string; username: string; password: string };
