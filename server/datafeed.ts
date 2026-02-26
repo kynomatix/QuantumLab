@@ -28,6 +28,58 @@ function getCachePath(key: string): string {
   return path.join(CACHE_DIR, `${key}.json`);
 }
 
+async function createExchange(): Promise<{ exchange: any; name: string }> {
+  const ccxtModule = await import("ccxt");
+  const ccxt = ccxtModule.default || ccxtModule;
+
+  const exchanges = [
+    { name: "gateio", cls: (ccxt as any).gateio, opts: { enableRateLimit: true, options: { defaultType: "swap" } } },
+    { name: "kraken", cls: (ccxt as any).kraken, opts: { enableRateLimit: true } },
+    { name: "bitget", cls: (ccxt as any).bitget, opts: { enableRateLimit: true, options: { defaultType: "swap" } } },
+  ];
+
+  for (const ex of exchanges) {
+    if (!ex.cls) continue;
+    try {
+      const instance = new ex.cls(ex.opts);
+      await instance.loadMarkets();
+      log(`Connected to ${ex.name} exchange`);
+      return { exchange: instance, name: ex.name };
+    } catch (err: any) {
+      log(`${ex.name} unavailable: ${err.message}`);
+    }
+  }
+  throw new Error("No exchange available. All exchanges failed to connect.");
+}
+
+let exchangeCache: { exchange: any; name: string } | null = null;
+
+async function getExchange(): Promise<{ exchange: any; name: string }> {
+  if (exchangeCache) return exchangeCache;
+  exchangeCache = await createExchange();
+  return exchangeCache;
+}
+
+function resolveSymbol(symbol: string, exchangeName: string, exchange: any): string {
+  const base = symbol.split("/")[0];
+
+  const candidates = [
+    symbol,
+    `${base}/USDT:USDT`,
+    `${base}/USDT`,
+    `${base}/USD`,
+  ];
+
+  for (const s of candidates) {
+    if (exchange.markets[s]) return s;
+  }
+
+  const available = Object.keys(exchange.markets)
+    .filter(m => m.startsWith(base))
+    .slice(0, 5);
+  throw new Error(`Symbol ${symbol} (base: ${base}) not found on ${exchangeName}. Available: ${available.join(", ")}`);
+}
+
 export async function fetchOHLCV(
   symbol: string,
   timeframe: string,
@@ -46,14 +98,11 @@ export async function fetchOHLCV(
     return cached;
   }
 
-  onProgress?.(`Fetching ${symbol} ${timeframe} from Binance...`);
-  log(`Fetching OHLCV for ${symbol} ${timeframe} from ${startDate} to ${endDate}`);
+  const { exchange, name: exchangeName } = await getExchange();
+  const resolvedSymbol = resolveSymbol(symbol, exchangeName, exchange);
 
-  const ccxtModule = await import("ccxt");
-  const ccxt = ccxtModule.default || ccxtModule;
-  const BinanceUsdm = (ccxt as any).binanceusdm || (ccxt as any).default?.binanceusdm;
-  if (!BinanceUsdm) throw new Error("ccxt binanceusdm not found");
-  const exchange = new BinanceUsdm({ enableRateLimit: true });
+  onProgress?.(`Fetching ${symbol} ${timeframe} from ${exchangeName}...`);
+  log(`Fetching OHLCV for ${resolvedSymbol} ${timeframe} from ${startDate} to ${endDate} via ${exchangeName}`);
 
   const startMs = new Date(startDate).getTime();
   const endMs = new Date(endDate).getTime();
@@ -63,7 +112,7 @@ export async function fetchOHLCV(
 
   while (since < endMs) {
     try {
-      const raw = await exchange.fetchOHLCV(symbol, timeframe, since, 1000);
+      const raw = await exchange.fetchOHLCV(resolvedSymbol, timeframe, since, 1000);
       if (!raw || raw.length === 0) break;
 
       for (const candle of raw) {
@@ -84,10 +133,11 @@ export async function fetchOHLCV(
         onProgress?.(`Fetched ${allCandles.length} candles for ${symbol} ${timeframe}...`);
       }
 
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise(resolve => setTimeout(resolve, exchange.rateLimit || 200));
     } catch (err: any) {
-      log(`Error fetching ${symbol}: ${err.message}`);
+      log(`Error fetching ${symbol} from ${exchangeName}: ${err.message}`);
       if (allCandles.length > 0) break;
+      exchangeCache = null;
       throw err;
     }
   }
