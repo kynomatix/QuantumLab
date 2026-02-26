@@ -1,0 +1,333 @@
+Build: Flux Momentum Backtester and Optimizer with UI
+Overview
+Build a web application that lets me paste in a Pine Script trading strategy, select a ticker and timeframe, and run a local parameter optimization backtest against Binance USD-M futures OHLCV data. The app should display results in a clean, professional dashboard.
+Do NOT use Streamlit. Use a proper React frontend (Next.js or Vite + React) with Tailwind CSS and a Python FastAPI backend. The UI should look professional, modern, and dark-themed (trading app aesthetic).
+
+Architecture
+Frontend: React + Tailwind CSS (dark theme, trading dashboard aesthetic)
+Backend:  Python FastAPI
+Data:     ccxt (Binance USD-M Futures public endpoints, no API key needed)
+Storage:  Local file system (cached OHLCV data, exported results)
+
+Core Workflow
+Step 1: User pastes Pine Script
+The user pastes their Pine Script strategy code into a text area. The backend parses the Pine Script to extract:
+
+All input.* declarations (type, default, min, max, step, group, options)
+Strategy settings (initial_capital, default_qty_value, commission)
+The logical structure of entry conditions, exit conditions, stop loss, take profit, and trailing stop logic
+
+The parser should handle these Pine input types:
+
+input.int(default, title, minval, maxval, step, group)
+input.float(default, title, minval, maxval, step, group)
+input.bool(default, title, group)
+input.string(default, title, options, group)
+
+From the parsed inputs, generate:
+
+A JSON schema of all parameters with bounds (like pine_summary.json)
+An optimization-ready parameter space
+
+Step 2: User configures the run
+
+Ticker selector: Dropdown with these Drift-aligned Binance perps:
+
+SOL/USDT:USDT, BTC/USDT:USDT, ETH/USDT:USDT, HYPE/USDT:USDT
+XRP/USDT:USDT, SUI/USDT:USDT, ZEC/USDT:USDT, PAXG/USDT:USDT
+JUP/USDT:USDT, DRIFT/USDT:USDT, DOGE/USDT:USDT, TAO/USDT:USDT
+Display friendly names like "SOL", "BTC" etc but pass the full ccxt symbol to backend
+Allow selecting multiple tickers for a sweep, or single ticker for smoke test
+
+
+Timeframe selector: Multi-select chips/buttons
+
+5m, 15m, 30m, 1h, 2h, 4h, 12h
+
+
+Date range: Start date and end date pickers (default: Jan 1 2024 to now)
+Optimization settings (collapsible advanced section, sensible defaults):
+
+Random samples: 900 (default)
+Top K seeds: 20 (default)
+Refinements per seed: 60 (default)
+Min trades filter: 10 (default)
+Max drawdown soft cap: 85% (default)
+
+
+Run mode:
+
+"Smoke Test" (single ticker, single timeframe, quick)
+"Full Sweep" (all selected tickers x all selected timeframes)
+
+
+
+Step 3: Run optimization
+
+Backend fetches OHLCV via ccxt (cache to disk so re-runs are instant)
+Runs the optimization loop:
+
+Baseline run with defaults
+Stage A: N random parameter samples
+Rank top K by: Net Profit % (primary), Win Rate % (secondary), Max Drawdown % (tertiary, lower is better)
+Stage B: Refine top K seeds with M neighbourhood samples each
+Final ranking
+
+
+Progress reporting: Use WebSocket or SSE to stream progress to the frontend in real-time:
+
+Current stage (fetching data, random search, refinement)
+Progress bar (X / N samples completed)
+Current best metrics found so far
+Estimated time remaining
+Per-ticker/timeframe progress for sweeps
+
+
+
+Step 4: Display results
+
+UI Design Requirements
+General Aesthetic
+
+Dark theme (dark gray/black backgrounds, NOT pure black)
+Accent colors: green (#26a69a) for profit/bullish, red (#ef5350) for loss/bearish, blue (#2196f3) for neutral/info, orange (#ff9800) for warnings
+Clean sans-serif font (Inter or similar)
+Rounded cards with subtle borders, no harsh shadows
+Responsive layout
+Looks like a professional trading terminal, not a data science notebook
+
+Pages/Views
+1. Setup Page
+
+Large code editor area for Pine Script paste (use Monaco editor or CodeMirror with Pine Script or JavaScript syntax highlighting)
+After paste, show a parsed parameters panel below showing all detected inputs grouped by their Pine Script groups, with the extracted bounds and defaults. Let user verify this looks correct.
+Ticker selector with token logos if possible (or just clean chips)
+Timeframe selector as pill buttons
+Date range picker
+Advanced settings collapsible
+Big "Run Smoke Test" and "Run Full Sweep" buttons
+
+2. Running Page (Progress Dashboard)
+
+Overall progress bar with percentage
+Current operation label (e.g. "Stage A: Random Search — SOL 15m — 342/900")
+Live updating "Best So Far" card showing current best metrics
+Elapsed time and ETA
+For full sweeps: a grid/table showing each ticker/timeframe combo with status (pending, running, complete) and best result so far
+Cancel button
+
+3. Results Dashboard
+This is the most important page. Make it look great.
+Summary Cards Row (top):
+
+Best Net Profit % (big number, green)
+Best Win Rate %
+Lowest Max Drawdown %
+Best Profit Factor
+Total Configurations Tested
+
+Best Configs Table:
+
+One row per (ticker, timeframe) combination
+Columns: Ticker, Timeframe, Net Profit %, Win Rate %, Max Drawdown %, Profit Factor, Total Trades
+Sortable by clicking column headers
+Color code: green for good metrics, red for bad
+Click a row to expand and see the full parameter set for that config
+
+Top 10 Per Combo:
+
+When user clicks a ticker/timeframe row, expand or navigate to show the top 10 configs for that combo
+Same table format with rank column
+Each row expandable to see full params
+
+Equity Curve Chart:
+
+For the selected best config, show an equity curve line chart
+X axis: time, Y axis: equity ($)
+Green line, dark background, clean grid lines
+Use a proper charting library (Recharts, Lightweight Charts by TradingView, or Chart.js)
+
+Trade Log Table:
+
+For selected config: show all trades
+Columns: Entry Time, Exit Time, Direction (Long/Short with colored badge), Entry Price, Exit Price, PnL %, PnL $, Exit Reason, Bars Held
+Color code rows: green background tint for wins, red for losses
+Sortable and filterable
+
+Parameter Comparison:
+
+Side by side comparison of top 3 configs for a ticker/timeframe
+Highlight which parameters differ between them
+
+Export Buttons:
+
+"Download CSV" for current view
+"Download Full XLSX Workbook" with all sheets (Best Configs, Top 10, Run Log)
+"Copy Best Config" button that formats the best parameters as Pine Script input overrides the user can paste back into TradingView
+
+
+Pine Script Parser Requirements
+The parser needs to extract input declarations from Pine Script. Here is the pattern:
+python# Parse lines like:
+# int bbLen = input.int(20, "BB Length", minval=5, maxval=50, group=g_squeeze)
+# float bbMult = input.float(2.0, "BB Multiplier", minval=0.5, maxval=4.0, step=0.1, group=g_squeeze)
+# bool useHullFilter = input.bool(true, "Enable Hull Filter", group=g_trend)
+# string tradeDir = input.string("Both", "Trade Direction", options=["Both", "Long Only", "Short Only"], group=g_dir)
+Extract: variable name, type, default value, label/title, min, max, step, group name, options list.
+Also parse group variable declarations like:
+string g_squeeze = "═══ SQUEEZE DETECTION ═══"
+Map group variables to their display names and use them to organize the parameter display.
+For the actual strategy logic conversion (Pine to Python backtest engine), the system needs to handle:
+Entry Logic Patterns
+Look for strategy.entry calls and trace back to find the conditions. Common patterns:
+
+Long entry: if longCondition ... strategy.entry("Long", strategy.long)
+Short entry: if shortCondition ... strategy.entry("Short", strategy.short)
+Extract the boolean conditions that gate entries
+
+Exit Logic Patterns
+
+strategy.exit calls with stop, limit, trail_points, trail_offset, qty_percent parameters
+strategy.close calls for signal-based exits
+Multiple strategy.exit calls for multi-tier TP (TP1, TP2, TP3 with different qty_percent values)
+
+Indicator Patterns
+Common indicators to detect and implement in Python:
+
+SMA, EMA, WMA, Hull MA
+Bollinger Bands (basis ± mult * stdev)
+Keltner Channel (EMA ± mult * ATR)
+RSI, ADX, ATR
+Linear regression (linreg)
+Volume comparisons (volume vs SMA of volume)
+Squeeze detection (BB inside KC)
+
+Important Implementation Notes for the Python Backtester
+
+Process bars sequentially (bar by bar, no lookahead)
+Entry price = bar close (simulating next bar open)
+Stop loss and take profit checks use bar high and low (intrabar fills)
+Conditional/signal exits use bar close price
+Commission applied both entry and exit (default 0.05% each way)
+Position sizing: fixed cash amount per trade (default $1000 with $100 capital = 10x simulation)
+Pyramiding = 0 (one position at a time)
+Partial take profits: each TP level closes a percentage of the current remaining position
+Trailing stop ratchets only in the profit direction (max for longs, min for shorts)
+Breakeven moves stop to entry + small offset after a TP is hit
+
+Parameter Optimization Engine
+
+Random search: sample N random parameter vectors within the parsed bounds
+For int params: uniform random between min and max
+For float params: snap to step size
+For bool params: random True/False
+For string params: random choice from options list
+Neighbourhood search: jitter 2-5 parameters by ~15% of their range
+Enforce logical constraints (e.g. TP1 < TP2 < TP3)
+Ranking: Net Profit % (primary descending), Win Rate % (secondary descending), Max Drawdown % (tertiary ascending)
+Filters: minimum trades threshold, max drawdown soft penalty
+
+
+Data Fetching
+Use ccxt library to fetch from Binance USD-M Futures (public, no API key):
+pythonimport ccxt
+exchange = ccxt.binanceusdm({"enableRateLimit": True})
+ohlcv = exchange.fetch_ohlcv("SOL/USDT:USDT", "15m", since=timestamp_ms, limit=1000)
+
+Paginate to get all candles in the date range (max 1000 per request)
+Cache fetched data to disk as parquet files
+On subsequent runs, load from cache if available for the same ticker/timeframe
+
+
+Backend API Endpoints
+POST /api/parse-pine          — Accepts Pine Script text, returns parsed parameters JSON
+POST /api/run-optimization    — Starts optimization run (returns job ID)
+GET  /api/job/{id}/progress   — SSE stream of progress updates
+GET  /api/job/{id}/results    — Get final results
+GET  /api/export/csv/{id}     — Download CSV
+GET  /api/export/xlsx/{id}    — Download XLSX workbook
+GET  /api/tickers             — List available tickers
+
+Tech Stack
+
+Frontend: React (Vite or Next.js), Tailwind CSS, Recharts or Lightweight Charts for charting, Monaco Editor for code input
+Backend: Python, FastAPI, ccxt, pandas, numpy, openpyxl
+Communication: Server-Sent Events (SSE) for real-time progress
+Storage: File system (parquet cache for OHLCV, JSON for results)
+
+
+File Structure
+/
+├── frontend/
+│   ├── src/
+│   │   ├── components/
+│   │   │   ├── PineEditor.jsx          # Monaco code editor
+│   │   │   ├── TickerSelector.jsx      # Ticker multi-select
+│   │   │   ├── TimeframeSelector.jsx   # TF pill buttons
+│   │   │   ├── ProgressDashboard.jsx   # Live progress view
+│   │   │   ├── ResultsDashboard.jsx    # Main results page
+│   │   │   ├── SummaryCards.jsx        # Top metric cards
+│   │   │   ├── ConfigTable.jsx         # Best configs table
+│   │   │   ├── EquityCurve.jsx         # Equity chart
+│   │   │   ├── TradeLog.jsx            # Trade history table
+│   │   │   └── ParamComparison.jsx     # Side by side params
+│   │   ├── pages/
+│   │   │   ├── Setup.jsx
+│   │   │   ├── Running.jsx
+│   │   │   └── Results.jsx
+│   │   └── App.jsx
+│   └── package.json
+├── backend/
+│   ├── main.py                         # FastAPI app
+│   ├── pine_parser.py                  # Pine Script input parser
+│   ├── engine.py                       # Backtest engine
+│   ├── indicators.py                   # Technical indicator functions
+│   ├── optimizer.py                    # Random search + refinement
+│   ├── datafeed.py                     # ccxt OHLCV fetcher
+│   ├── scoring.py                      # Ranking and filtering
+│   ├── export.py                       # CSV/XLSX export
+│   └── requirements.txt
+├── cache/                              # OHLCV cache (auto-created)
+└── exports/                            # Result files (auto-created)
+
+Example Pine Script (for testing)
+Here is an example strategy the parser should handle. This is the Flux Momentum v1 strategy:
+The strategy uses:
+
+Bollinger Band / Keltner Channel squeeze detection
+Linear regression momentum oscillator
+Hull MA trend filter
+ADX trend strength filter
+Volume surge filter
+RSI entry guard
+Multi-tier take profit (TP1, TP2, TP3) with partial position closes
+ATR or percentage based stop loss
+Trailing stop with configurable activation
+Breakeven stop management
+Conditional exits: momentum flip, Hull flip, re-squeeze, RSI extreme, ADX drop
+
+Input groups include:
+
+BACKTEST DATE RANGE (useDateFilter, backtestStart, backtestEnd)
+DIRECTION CONTROL (tradeDir: Both/Long Only/Short Only)
+SQUEEZE DETECTION (bbLen, bbMult, kcLen, kcMult, sqzLookback)
+MOMENTUM (momLen, momSmooth, momAccelFilter)
+TREND FILTER (hullLen, useHullFilter)
+ADX FILTER (adxLen, adxThresh, useAdxFilter, adxRisingOk)
+VOLUME FILTER (volLen, volMult, useVolFilter)
+RSI GUARD (rsiLen, rsiOB, rsiOS, useRsiGuard)
+STOP LOSS (slMode ATR/Percent, slAtrMult, slPct, slAtrLen)
+TAKE PROFIT (tpMode ATR/Percent/Risk Multiple, tp1Mult, tp2Mult, tp3Mult, tp1Pct, tp2Pct, tp3Pct)
+BREAKEVEN (useBreakeven, beTrigger After TP1/After TP2, beOffsetPct)
+TRAILING STOP (useTrail, trailMode ATR/Percent, trailAtrMult, trailPct, trailActivation After TP1/After TP2/Immediately)
+CONDITIONAL EXITS (exitOnMomFlip, exitOnHullFlip, exitOnResqueeze, exitOnRsiExtreme, exitOnAdxDrop, adxDropLevel)
+
+
+Important Notes
+
+The Pine Script parser does NOT need to perfectly convert ALL Pine logic to Python automatically. It primarily needs to extract the INPUT PARAMETERS reliably. For the strategy logic conversion, it should handle common patterns (indicators, entry/exit conditions, position management) and the user can verify/adjust. The key value is the parameter extraction and optimization loop.
+The backtester must be deterministic. Same inputs = same outputs every time. Use seeded random for optimization.
+Cache OHLCV data aggressively. Fetching is slow, computation is fast. First run per ticker/timeframe fetches and caches. All subsequent optimization samples reuse cached data.
+The UI must show real-time progress. Long optimization runs (900 random + 1200 refinements) can take minutes per ticker/timeframe. Users need to see it's working and how far along it is.
+All monetary calculations use: $100 initial capital, $1000 per trade (simulating 10x leverage), 0.05% commission each way.
+Make the "Copy Best Config" export format the parameters as Pine Script input overrides so the user can paste them directly back into TradingView to verify the results visually.
