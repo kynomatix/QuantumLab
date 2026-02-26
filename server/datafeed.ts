@@ -28,56 +28,36 @@ function getCachePath(key: string): string {
   return path.join(CACHE_DIR, `${key}.json`);
 }
 
-async function createExchange(): Promise<{ exchange: any; name: string }> {
-  const ccxtModule = await import("ccxt");
-  const ccxt = ccxtModule.default || ccxtModule;
-
-  const exchanges = [
-    { name: "gateio", cls: (ccxt as any).gateio, opts: { enableRateLimit: true, options: { defaultType: "swap" } } },
-    { name: "kraken", cls: (ccxt as any).kraken, opts: { enableRateLimit: true } },
-    { name: "bitget", cls: (ccxt as any).bitget, opts: { enableRateLimit: true, options: { defaultType: "swap" } } },
-  ];
-
-  for (const ex of exchanges) {
-    if (!ex.cls) continue;
-    try {
-      const instance = new ex.cls(ex.opts);
-      await instance.loadMarkets();
-      log(`Connected to ${ex.name} exchange`);
-      return { exchange: instance, name: ex.name };
-    } catch (err: any) {
-      log(`${ex.name} unavailable: ${err.message}`);
-    }
-  }
-  throw new Error("No exchange available. All exchanges failed to connect.");
-}
-
-let exchangeCache: { exchange: any; name: string } | null = null;
-
-async function getExchange(): Promise<{ exchange: any; name: string }> {
-  if (exchangeCache) return exchangeCache;
-  exchangeCache = await createExchange();
-  return exchangeCache;
-}
-
-function resolveSymbol(symbol: string, exchangeName: string, exchange: any): string {
+function symbolToGateContract(symbol: string): string {
   const base = symbol.split("/")[0];
+  return `${base}_USDT`;
+}
 
-  const candidates = [
-    symbol,
-    `${base}/USDT:USDT`,
-    `${base}/USDT`,
-    `${base}/USD`,
-  ];
+function mapTimeframeToGate(tf: string): string {
+  const map: Record<string, string> = {
+    "1m": "1m", "5m": "5m", "15m": "15m", "30m": "30m",
+    "1h": "1h", "2h": "2h", "4h": "4h", "8h": "8h",
+    "12h": "12h", "1d": "1d", "1w": "1w",
+  };
+  return map[tf] || tf;
+}
 
-  for (const s of candidates) {
-    if (exchange.markets[s]) return s;
+async function fetchGateOHLCV(
+  contract: string,
+  timeframe: string,
+  fromSec: number,
+  toSec: number,
+  limit: number = 1000
+): Promise<any[]> {
+  const interval = mapTimeframeToGate(timeframe);
+  const url = `https://api.gateio.ws/api/v4/futures/usdt/candlesticks?contract=${contract}&interval=${interval}&from=${fromSec}&to=${toSec}&limit=${limit}`;
+
+  const res = await fetch(url);
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Gate.io API error ${res.status}: ${text}`);
   }
-
-  const available = Object.keys(exchange.markets)
-    .filter(m => m.startsWith(base))
-    .slice(0, 5);
-  throw new Error(`Symbol ${symbol} (base: ${base}) not found on ${exchangeName}. Available: ${available.join(", ")}`);
+  return res.json();
 }
 
 export async function fetchOHLCV(
@@ -98,55 +78,82 @@ export async function fetchOHLCV(
     return cached;
   }
 
-  const { exchange, name: exchangeName } = await getExchange();
-  const resolvedSymbol = resolveSymbol(symbol, exchangeName, exchange);
+  const contract = symbolToGateContract(symbol);
+  onProgress?.(`Fetching ${symbol} ${timeframe} from Gate.io...`);
+  log(`Fetching OHLCV for ${contract} ${timeframe} from ${startDate} to ${endDate} via Gate.io`);
 
-  onProgress?.(`Fetching ${symbol} ${timeframe} from ${exchangeName}...`);
-  log(`Fetching OHLCV for ${resolvedSymbol} ${timeframe} from ${startDate} to ${endDate} via ${exchangeName}`);
-
-  const startMs = new Date(startDate).getTime();
-  const endMs = new Date(endDate).getTime();
+  const startSec = Math.floor(new Date(startDate).getTime() / 1000);
+  const endSec = Math.floor(new Date(endDate).getTime() / 1000);
   const allCandles: OHLCV[] = [];
-  let since = startMs;
+  let since = startSec;
   let page = 0;
 
-  while (since < endMs) {
+  while (since < endSec) {
     try {
-      const raw = await exchange.fetchOHLCV(resolvedSymbol, timeframe, since, 1000);
+      const batchEnd = Math.min(since + getTimeframeSeconds(timeframe) * 1000, endSec);
+      const raw = await fetchGateOHLCV(contract, timeframe, since, batchEnd, 1000);
       if (!raw || raw.length === 0) break;
 
       for (const candle of raw) {
-        if (candle[0] > endMs) break;
+        const ts = candle.t * 1000;
+        if (ts > endSec * 1000) break;
         allCandles.push({
-          time: candle[0],
-          open: candle[1],
-          high: candle[2],
-          low: candle[3],
-          close: candle[4],
-          volume: candle[5],
+          time: ts,
+          open: parseFloat(candle.o),
+          high: parseFloat(candle.h),
+          low: parseFloat(candle.l),
+          close: parseFloat(candle.c),
+          volume: parseFloat(candle.v || candle.sum || "0"),
         });
       }
 
-      since = raw[raw.length - 1][0] + 1;
+      const lastTs = raw[raw.length - 1].t;
+      if (lastTs <= since) break;
+      since = lastTs + getTimeframeSeconds(timeframe);
       page++;
+
       if (page % 5 === 0) {
         onProgress?.(`Fetched ${allCandles.length} candles for ${symbol} ${timeframe}...`);
       }
 
-      await new Promise(resolve => setTimeout(resolve, exchange.rateLimit || 200));
+      await new Promise(resolve => setTimeout(resolve, 200));
     } catch (err: any) {
-      log(`Error fetching ${symbol} from ${exchangeName}: ${err.message}`);
+      log(`Error fetching ${symbol} from Gate.io: ${err.message}`);
       if (allCandles.length > 0) break;
-      exchangeCache = null;
       throw err;
     }
   }
 
   if (allCandles.length > 0) {
-    fs.writeFileSync(cachePath, JSON.stringify(allCandles));
-    log(`Cached ${allCandles.length} candles for ${symbol} ${timeframe}`);
+    const deduped = deduplicateCandles(allCandles);
+    fs.writeFileSync(cachePath, JSON.stringify(deduped));
+    log(`Cached ${deduped.length} candles for ${symbol} ${timeframe}`);
+    onProgress?.(`Fetched ${deduped.length} candles for ${symbol} ${timeframe}`);
+    return deduped;
   }
 
   onProgress?.(`Fetched ${allCandles.length} candles for ${symbol} ${timeframe}`);
   return allCandles;
+}
+
+function deduplicateCandles(candles: OHLCV[]): OHLCV[] {
+  const seen = new Set<number>();
+  const result: OHLCV[] = [];
+  for (const c of candles) {
+    if (!seen.has(c.time)) {
+      seen.add(c.time);
+      result.push(c);
+    }
+  }
+  result.sort((a, b) => a.time - b.time);
+  return result;
+}
+
+function getTimeframeSeconds(tf: string): number {
+  const map: Record<string, number> = {
+    "1m": 60, "5m": 300, "15m": 900, "30m": 1800,
+    "1h": 3600, "2h": 7200, "4h": 14400, "8h": 28800,
+    "12h": 43200, "1d": 86400, "1w": 604800,
+  };
+  return map[tf] || 900;
 }
