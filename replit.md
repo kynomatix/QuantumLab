@@ -3,6 +3,18 @@
 ## Overview
 Web application for backtesting and optimizing Pine Script trading strategies against Binance USD-M futures OHLCV data. Dark-themed trading terminal aesthetic with PostgreSQL persistence for building a strategy library over time.
 
+## Big Picture / Product Vision
+This app is a companion service to **myquantumvault.com** (QuantumVault), a platform for creating and automating TradingView strategies. The purpose of this backtester is to validate and optimize strategies before they go live — preventing capital loss from untested or poorly-tuned strategies.
+
+**Future integration plan:**
+- QuantumVault users (and AI agents) will be able to submit strategies to this backtester via API
+- The backtester runs optimization jobs and returns the best parameter configurations
+- This creates a feedback loop: generate strategy → backtest/optimize → deploy only proven configs
+- The app needs to handle requests from both human users and automated agents
+- Originally attempted in OpenClaw but hit rate limits; this Replit deployment is the production home
+
+**Why this matters:** Every strategy deployed without proper backtesting is a risk of capital loss. This tool is the quality gate between strategy generation and live deployment.
+
 ## Architecture
 - **Frontend**: React + Vite + Tailwind CSS (dark theme), Monaco Editor, Recharts
 - **Backend**: Express.js (TypeScript)
@@ -26,6 +38,8 @@ Web application for backtesting and optimizing Pine Script trading strategies ag
 - `optimization_runs` - Records of each optimization run (config, status, dates)
 - `optimization_results` - Individual results per ticker/timeframe combo per run
 
+Tables defined in `server/schema.ts` (Drizzle ORM). Shared client-compatible types in `shared/schema.ts`.
+
 ## File Structure
 ### Frontend
 - `client/src/App.tsx` - Main app with routing, navigation header (Setup, Strategies)
@@ -37,6 +51,7 @@ Web application for backtesting and optimizing Pine Script trading strategies ag
 
 ### Backend
 - `server/routes.ts` - API endpoints (parse, run, progress SSE, results, export, strategies CRUD, runs)
+- `server/schema.ts` - Drizzle ORM table definitions (server-only, not bundled to client)
 - `server/pine-parser.ts` - Pine Script input declaration parser
 - `server/engine.ts` - Bar-by-bar backtesting engine with squeeze momentum strategy
 - `server/indicators.ts` - Technical indicators (SMA, EMA, WMA, Hull MA, BB, KC, RSI, ADX, ATR, LinReg, Volume, Squeeze)
@@ -46,7 +61,7 @@ Web application for backtesting and optimizing Pine Script trading strategies ag
 - `server/db.ts` - PostgreSQL connection via Drizzle ORM
 
 ### Shared
-- `shared/schema.ts` - Drizzle tables, TypeScript types, Zod schemas, constants
+- `shared/schema.ts` - TypeScript interfaces, Zod validation schemas, constants (client-safe, no Drizzle imports)
 
 ## API Endpoints
 - `GET /api/tickers` - List available tickers
@@ -74,5 +89,7 @@ Dark trading terminal aesthetic with:
 - Warning: orange (#ff9800)
 - Font: Inter (UI) + JetBrains Mono (code/data)
 
-## Important Design Decision
-Date range inputs in Pine Script strategies are automatically detected and excluded from the optimization parameter space. The date range is set via the UI date pickers and is treated as a fixed configuration, never modified by the optimizer.
+## Important Design Decisions
+1. Date range inputs in Pine Script strategies are automatically detected and excluded from the optimization parameter space. The date range is set via the UI date pickers and is treated as a fixed configuration, never modified by the optimizer.
+2. Drizzle table definitions live in `server/schema.ts` (not shared/) to avoid bundling `drizzle-orm/pg-core` into the client. Shared types are plain TypeScript interfaces.
+3. The app is designed to eventually serve as an API backend for QuantumVault, handling optimization requests from both users and AI agents.
