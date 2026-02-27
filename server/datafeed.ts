@@ -46,11 +46,10 @@ async function fetchGateOHLCV(
   contract: string,
   timeframe: string,
   fromSec: number,
-  toSec: number,
-  limit: number = 1000
+  toSec: number
 ): Promise<any[]> {
   const interval = mapTimeframeToGate(timeframe);
-  const url = `https://api.gateio.ws/api/v4/futures/usdt/candlesticks?contract=${contract}&interval=${interval}&from=${fromSec}&to=${toSec}&limit=${limit}`;
+  const url = `https://api.gateio.ws/api/v4/futures/usdt/candlesticks?contract=${contract}&interval=${interval}&from=${fromSec}&to=${toSec}`;
 
   const res = await fetch(url);
   if (!res.ok) {
@@ -90,9 +89,12 @@ export async function fetchOHLCV(
 
   while (since < endSec) {
     try {
-      const batchEnd = Math.min(since + getTimeframeSeconds(timeframe) * 1000, endSec);
-      const raw = await fetchGateOHLCV(contract, timeframe, since, batchEnd, 1000);
-      if (!raw || raw.length === 0) break;
+      const batchEnd = Math.min(since + getTimeframeSeconds(timeframe) * 2000, endSec);
+      const raw = await fetchGateOHLCV(contract, timeframe, since, batchEnd);
+      if (!raw || raw.length === 0) {
+        since = batchEnd;
+        continue;
+      }
 
       for (const candle of raw) {
         const ts = candle.t * 1000;

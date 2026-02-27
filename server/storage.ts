@@ -106,7 +106,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   async saveResults(runId: number, results: BacktestResult[]): Promise<void> {
-    if (results.length === 0) return;
+    console.log(`[saveResults] runId=${runId}, results.length=${results.length}`);
+    if (results.length === 0) {
+      console.log(`[saveResults] No results to save, returning early`);
+      return;
+    }
     const insertData: InsertResult[] = results.map((r, idx) => ({
       runId,
       ticker: r.ticker,
@@ -124,8 +128,11 @@ export class DatabaseStorage implements IStorage {
 
     const batchSize = 50;
     for (let i = 0; i < insertData.length; i += batchSize) {
-      await db.insert(optimizationResults).values(insertData.slice(i, i + batchSize));
+      const batch = insertData.slice(i, i + batchSize);
+      console.log(`[saveResults] Inserting batch ${i / batchSize + 1}, size=${batch.length}`);
+      await db.insert(optimizationResults).values(batch);
     }
+    console.log(`[saveResults] All batches inserted successfully`);
   }
 
   async getRunResults(runId: number): Promise<OptResult[]> {

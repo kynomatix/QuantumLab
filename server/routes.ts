@@ -146,6 +146,7 @@ export async function registerRoutes(
         job.id,
         job.abortSignal
       ).then(async (results) => {
+        log(`Optimization finished: ${results.length} results`);
         storage.setResults(job.id, results);
         if (runId) {
           try {
@@ -153,12 +154,13 @@ export async function registerRoutes(
             const totalSamples = config.randomSamples + config.topK * config.refinementsPerSeed;
             const combos = config.tickers.length * config.timeframes.length;
             await storage.completeRun(runId, totalSamples * combos);
+            log(`Run ${runId} saved and completed`);
           } catch (err: any) {
-            log(`Failed to save results to DB: ${err.message}`);
+            log(`Failed to save results to DB: ${err.stack || err.message}`);
           }
         }
       }).catch(async (err) => {
-        log(`Optimization error: ${err.message}`);
+        log(`Optimization error: ${err.stack || err.message}`);
         storage.updateProgress(job.id, {
           jobId: job.id,
           status: "error",

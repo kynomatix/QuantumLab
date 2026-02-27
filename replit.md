@@ -95,3 +95,5 @@ Dark trading terminal aesthetic with:
 3. The app is designed to eventually serve as an API backend for QuantumVault, handling optimization requests from both users and AI agents.
 4. `process.on("SIGHUP", () => {})` in server/index.ts is critical - the Replit environment sends SIGHUP ~60s after process start, which would kill the server without this handler.
 5. Uses direct Gate.io REST API calls instead of ccxt (56MB saved). Binance/Bybit are geo-blocked from Replit's US servers.
+6. Gate.io API constraint: when using `from` + `to` parameters, do NOT include `limit` (returns 400). Max ~2000 candles per request without limit.
+7. OHLCV data is disk-cached in `cache/` directory to avoid redundant API calls.
