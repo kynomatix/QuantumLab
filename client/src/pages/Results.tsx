@@ -9,7 +9,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   TrendingUp, TrendingDown, Percent, BarChart3, Download, Copy,
   ArrowUpDown, ChevronDown, ChevronUp, Activity, Zap, ArrowLeft,
-  CheckCircle2, XCircle,
+  CheckCircle2, XCircle, Loader2,
 } from "lucide-react";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
@@ -28,16 +28,25 @@ export default function Results() {
   const [expandedCombo, setExpandedCombo] = useState<string | null>(null);
   const [tradeSort, setTradeSort] = useState<{ key: keyof TradeRecord; dir: SortDir }>({ key: "entryTime", dir: "desc" });
 
+  const [pollCount, setPollCount] = useState(0);
+  const maxPolls = 15;
+
   const { data: results, isLoading, error } = useQuery<JobResult>({
     queryKey: ["/api/job", params.jobId, "results"],
     queryFn: async () => {
       const res = await fetch(`/api/job/${params.jobId}/results`);
-      if (!res.ok) throw new Error("Results not available");
+      if (!res.ok) {
+        setPollCount(c => c + 1);
+        throw new Error("Results not available");
+      }
       return res.json();
     },
-    refetchInterval: false,
-    retry: 2,
-    retryDelay: 1000,
+    refetchInterval: (query) => {
+      if (query.state.data) return false;
+      if (pollCount >= maxPolls) return false;
+      return 2000;
+    },
+    retry: false,
   });
 
   const sortedConfigs = useMemo(() => {
@@ -115,12 +124,25 @@ export default function Results() {
     }
   };
 
-  if (isLoading) {
+  const stillPolling = !results && pollCount < maxPolls;
+
+  if (isLoading || stillPolling) {
     return (
       <div className="flex items-center justify-center h-96">
-        <div className="text-center space-y-4">
-          <Activity className="w-8 h-8 text-primary animate-pulse mx-auto" />
-          <p className="text-sm text-muted-foreground">Loading results...</p>
+        <div className="text-center space-y-5">
+          <div className="relative mx-auto w-16 h-16">
+            <div className="absolute inset-0 rounded-full border-4 border-muted/30" />
+            <div className="absolute inset-0 rounded-full border-4 border-t-primary border-r-transparent border-b-transparent border-l-transparent animate-spin" />
+            <div className="absolute inset-2 rounded-full border-4 border-t-transparent border-r-primary/50 border-b-transparent border-l-transparent animate-spin" style={{ animationDirection: "reverse", animationDuration: "1.5s" }} />
+            <Activity className="absolute inset-0 m-auto w-5 h-5 text-primary/70" />
+          </div>
+          <div className="space-y-2">
+            <p className="text-sm font-medium" data-testid="text-loading-results">Preparing results...</p>
+            <p className="text-xs text-muted-foreground">Finalizing optimization data</p>
+          </div>
+          {pollCount > 3 && (
+            <p className="text-xs text-muted-foreground animate-pulse">Still processing, hang tight...</p>
+          )}
         </div>
       </div>
     );
@@ -129,14 +151,25 @@ export default function Results() {
   if (error || !results) {
     return (
       <div className="flex items-center justify-center h-96">
-        <div className="text-center space-y-4">
-          <XCircle className="w-8 h-8 text-trading-loss mx-auto" />
-          <p className="text-sm text-muted-foreground">Results not available yet. The optimization may still be running.</p>
-          <Link href="/">
-            <Button variant="secondary" size="sm" data-testid="button-back-home">
-              <ArrowLeft className="w-3 h-3 mr-1" /> Back to Setup
-            </Button>
-          </Link>
+        <div className="text-center space-y-5">
+          <div className="relative mx-auto w-16 h-16">
+            <div className="absolute inset-0 rounded-full bg-trading-loss/10 flex items-center justify-center">
+              <XCircle className="w-8 h-8 text-trading-loss" />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <p className="text-sm font-medium" data-testid="text-no-results">Results unavailable</p>
+            <p className="text-xs text-muted-foreground max-w-xs mx-auto">
+              The optimization may have encountered an issue. You can go back and try running it again.
+            </p>
+          </div>
+          <div className="flex items-center gap-3 justify-center">
+            <Link href="/">
+              <Button variant="secondary" size="sm" data-testid="button-back-home">
+                <ArrowLeft className="w-3 h-3 mr-1" /> Back to Setup
+              </Button>
+            </Link>
+          </div>
         </div>
       </div>
     );
