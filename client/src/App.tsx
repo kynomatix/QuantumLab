@@ -25,8 +25,8 @@ function Header() {
               <Zap className="w-4 h-4 text-primary" data-testid="icon-logo" />
             </div>
             <div>
-              <h1 className="text-sm font-semibold tracking-tight" data-testid="text-app-title">Flux Momentum</h1>
-              <p className="text-xs text-muted-foreground">Backtester & Optimizer</p>
+              <h1 className="text-sm font-semibold tracking-tight" data-testid="text-app-title">QuantumLab</h1>
+              <p className="text-xs text-muted-foreground">Strategy Backtester & Optimizer</p>
             </div>
           </div>
         </Link>

@@ -1,4 +1,4 @@
-# Flux Momentum Backtester & Optimizer
+# QuantumLab — Strategy Backtester & Optimizer
 
 ## Overview
 Web application for backtesting and optimizing Pine Script trading strategies against Binance USD-M futures OHLCV data. Dark-themed trading terminal aesthetic with PostgreSQL persistence for building a strategy library over time.
