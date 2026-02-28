@@ -144,6 +144,27 @@ export interface JobProgress {
   }>;
 }
 
+export interface RiskAnalysis {
+  maxDrawdownPercent: number;
+  recommendedLeverage: number;
+  maxSafeLeverage: number;
+  liquidationBuffer: number;
+  consecutiveLosses: number;
+  longestLosingStreak: number;
+  avgLossPercent: number;
+  avgWinPercent: number;
+  worstTradePercent: number;
+  recoveryFactor: number;
+  kellyPercent: number;
+  riskOfRuin: number;
+  recommendedWalletAllocation: number;
+  minCapitalRequired: number;
+  streakDrawdownPercent: number;
+  avgBarsInDrawdown: number;
+  riskRating: "LOW" | "MODERATE" | "HIGH" | "EXTREME";
+  recommendations: string[];
+}
+
 export interface JobResult {
   jobId: string;
   runId?: number;

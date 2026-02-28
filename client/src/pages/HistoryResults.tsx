@@ -16,6 +16,8 @@ import {
   Tooltip as RechartsTooltip,
 } from "recharts";
 import type { OptResult, OptimizationRun } from "@shared/schema";
+import { calculateRiskAnalysis } from "@/lib/risk-analysis";
+import RiskManagementPanel from "@/components/RiskManagementPanel";
 
 type SortKey = "netProfitPercent" | "winRatePercent" | "maxDrawdownPercent" | "profitFactor" | "totalTrades";
 type SortDir = "asc" | "desc";
@@ -68,6 +70,19 @@ export default function HistoryResults() {
     if (sortKey === key) setSortDir(d => d === "desc" ? "asc" : "desc");
     else { setSortKey(key); setSortDir("desc"); }
   };
+
+  const riskAnalysis = useMemo(() => {
+    if (!selectedResult) return null;
+    const trades = (selectedResult.trades as any[]) ?? [];
+    const equityCurve = (selectedResult.equityCurve as any[]) ?? [];
+    return calculateRiskAnalysis(
+      trades,
+      selectedResult.netProfitPercent,
+      selectedResult.maxDrawdownPercent,
+      selectedResult.winRatePercent,
+      equityCurve
+    );
+  }, [selectedResult]);
 
   const handleCopyParams = () => {
     if (!selectedResult) return;
@@ -196,6 +211,7 @@ export default function HistoryResults() {
         <Tabs defaultValue="equity" className="space-y-4">
           <TabsList data-testid="tabs-history-detail">
             <TabsTrigger value="equity" data-testid="tab-history-equity">Equity Curve</TabsTrigger>
+            <TabsTrigger value="risk" data-testid="tab-history-risk">Risk Management</TabsTrigger>
             <TabsTrigger value="params" data-testid="tab-history-params">Parameters</TabsTrigger>
             <TabsTrigger value="trades" data-testid="tab-history-trades">Trades</TabsTrigger>
           </TabsList>
@@ -228,6 +244,16 @@ export default function HistoryResults() {
                 <p className="text-sm text-muted-foreground text-center py-8">No equity curve data saved</p>
               )}
             </Card>
+          </TabsContent>
+
+          <TabsContent value="risk">
+            {riskAnalysis && (
+              <RiskManagementPanel
+                analysis={riskAnalysis}
+                ticker={selectedResult.ticker}
+                timeframe={selectedResult.timeframe}
+              />
+            )}
           </TabsContent>
 
           <TabsContent value="params">

@@ -32,6 +32,7 @@ This app is a companion service to **myquantumvault.com** (QuantumVault), a plat
 7. CSV export
 8. Strategy library - save/load/manage strategies with persistent optimization history
 9. Historical run results - view past optimization runs and their best configs
+10. Risk Management panel - leverage recommendations, wallet allocation, Kelly criterion, risk of ruin, losing streak analysis, deployment recommendations (accounts for fixed-size trading and auto top-up risks)
 
 ## Database Schema
 - `strategies` - Saved Pine Script strategies with parsed inputs
@@ -48,6 +49,9 @@ Tables defined in `server/schema.ts` (Drizzle ORM). Shared client-compatible typ
 - `client/src/pages/Results.tsx` - Live results dashboard with summary cards, config table, equity curve, trade log
 - `client/src/pages/Strategies.tsx` - Strategy library with saved strategies and their run history
 - `client/src/pages/HistoryResults.tsx` - View saved optimization run results from database
+
+- `client/src/lib/risk-analysis.ts` - Risk management calculations (leverage, Kelly, risk of ruin, streak analysis)
+- `client/src/components/RiskManagementPanel.tsx` - Risk management display component
 
 ### Backend
 - `server/routes.ts` - API endpoints (parse, run, progress SSE, results, export, strategies CRUD, runs)

@@ -16,6 +16,8 @@ import {
   ResponsiveContainer, Area, AreaChart,
 } from "recharts";
 import type { JobResult, BacktestResult, TradeRecord } from "@shared/schema";
+import { calculateRiskAnalysis } from "@/lib/risk-analysis";
+import RiskManagementPanel from "@/components/RiskManagementPanel";
 
 type SortKey = "netProfitPercent" | "winRatePercent" | "maxDrawdownPercent" | "profitFactor" | "totalTrades";
 type SortDir = "asc" | "desc";
@@ -87,6 +89,17 @@ export default function Results() {
     if (!results || results.configs.length === 0) return 0;
     return Math.max(...results.configs.map(c => c.profitFactor));
   }, [results]);
+
+  const riskAnalysis = useMemo(() => {
+    if (!selectedConfig) return null;
+    return calculateRiskAnalysis(
+      selectedConfig.trades,
+      selectedConfig.netProfitPercent,
+      selectedConfig.maxDrawdownPercent,
+      selectedConfig.winRatePercent,
+      selectedConfig.equityCurve
+    );
+  }, [selectedConfig]);
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -294,6 +307,7 @@ export default function Results() {
         <Tabs defaultValue="equity" className="space-y-4">
           <TabsList data-testid="tabs-detail">
             <TabsTrigger value="equity" data-testid="tab-equity">Equity Curve</TabsTrigger>
+            <TabsTrigger value="risk" data-testid="tab-risk">Risk Management</TabsTrigger>
             <TabsTrigger value="trades" data-testid="tab-trades">Trade Log</TabsTrigger>
             <TabsTrigger value="params" data-testid="tab-params">Parameters</TabsTrigger>
           </TabsList>
@@ -355,6 +369,16 @@ export default function Results() {
                 </ResponsiveContainer>
               </div>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="risk">
+            {riskAnalysis && (
+              <RiskManagementPanel
+                analysis={riskAnalysis}
+                ticker={selectedConfig.ticker}
+                timeframe={selectedConfig.timeframe}
+              />
+            )}
           </TabsContent>
 
           <TabsContent value="trades">
