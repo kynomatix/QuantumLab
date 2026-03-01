@@ -197,6 +197,10 @@ export async function runOptimization(
       }
       globalCurrent++;
 
+      if (s % 10 === 0) {
+        await new Promise(resolve => setImmediate(resolve));
+      }
+
       if (s % 50 === 0) {
         const best = comboResults.sort((a, b) => scoreResult(b) - scoreResult(a))[0];
         onProgress({
@@ -244,6 +248,9 @@ export async function runOptimization(
           comboResults.push(result);
         }
         globalCurrent++;
+        if (r % 10 === 0) {
+          await new Promise(resolve => setImmediate(resolve));
+        }
       }
 
       if (seedIdx % 5 === 0) {

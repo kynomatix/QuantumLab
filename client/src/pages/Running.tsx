@@ -30,33 +30,53 @@ export default function Running() {
   const eventSourceRef = useRef<EventSource | null>(null);
 
   useEffect(() => {
-    const es = new EventSource(`/api/job/${params.jobId}/progress`);
-    eventSourceRef.current = es;
+    let reconnectTimer: ReturnType<typeof setTimeout>;
+    let isMounted = true;
 
-    es.onmessage = (event) => {
-      try {
-        const data: JobProgress = JSON.parse(event.data);
-        setProgress(data);
-        if (data.status === "complete") {
-          es.close();
-          navigate(`/results/${params.jobId}`);
+    function connect() {
+      if (!isMounted) return;
+      const es = new EventSource(`/api/job/${params.jobId}/progress`);
+      eventSourceRef.current = es;
+
+      es.onmessage = (event) => {
+        try {
+          const data: JobProgress = JSON.parse(event.data);
+          setProgress(data);
+          if (data.status === "complete") {
+            es.close();
+            navigate(`/results/${params.jobId}`);
+          }
+          if (data.status === "error") {
+            es.close();
+            toast({ title: "Optimization failed", description: data.error, variant: "destructive" });
+          }
+        } catch {}
+      };
+
+      es.onerror = () => {
+        es.close();
+        if (isMounted) {
+          reconnectTimer = setTimeout(async () => {
+            try {
+              const res = await fetch(`/api/job/${params.jobId}/results`);
+              if (res.ok) {
+                navigate(`/results/${params.jobId}`);
+                return;
+              }
+            } catch {}
+            connect();
+          }, 3000);
         }
-        if (data.status === "error") {
-          es.close();
-          toast({ title: "Optimization failed", description: data.error, variant: "destructive" });
-        }
-      } catch {}
+      };
+    }
+
+    connect();
+
+    return () => {
+      isMounted = false;
+      clearTimeout(reconnectTimer);
+      eventSourceRef.current?.close();
     };
-
-    es.onerror = () => {
-      setTimeout(() => {
-        if (eventSourceRef.current === es) {
-          es.close();
-        }
-      }, 5000);
-    };
-
-    return () => { es.close(); };
   }, [params.jobId, navigate, toast]);
 
   const handleCancel = async () => {
