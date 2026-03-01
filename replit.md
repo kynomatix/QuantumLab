@@ -41,13 +41,22 @@ This app is a companion service to **myquantumvault.com** (QuantumVault), a plat
 
 Tables defined in `server/schema.ts` (Drizzle ORM). Shared client-compatible types in `shared/schema.ts`.
 
+## Navigation & Layout
+- Sidebar layout using shadcn SidebarProvider/Sidebar components
+- Sidebar toggle in sticky header
+- Workspace section: Setup & Run, Strategy Library, Run History
+- Recent Runs section: quick access to last 8 completed runs
+- Strategies section: quick links to load saved strategies into Setup
+
 ## File Structure
 ### Frontend
-- `client/src/App.tsx` - Main app with routing, navigation header (Setup, Strategies)
+- `client/src/App.tsx` - Main app with sidebar layout, routing, SidebarProvider
+- `client/src/components/app-sidebar.tsx` - Sidebar navigation component (workspace nav, recent runs, strategies)
 - `client/src/pages/Setup.tsx` - Pine Script editor, ticker/TF/date selection, save strategy, parsed params display
-- `client/src/pages/Running.tsx` - Real-time optimization progress dashboard
+- `client/src/pages/Running.tsx` - Real-time optimization progress dashboard (SSE reconnect on error)
 - `client/src/pages/Results.tsx` - Live results dashboard with summary cards, config table, equity curve, trade log
 - `client/src/pages/Strategies.tsx` - Strategy library with saved strategies and their run history
+- `client/src/pages/RunHistory.tsx` - All completed optimization runs listed chronologically
 - `client/src/pages/HistoryResults.tsx` - View saved optimization run results from database
 
 - `client/src/lib/risk-analysis.ts` - Risk management calculations (leverage, Kelly, risk of ruin, streak analysis)
