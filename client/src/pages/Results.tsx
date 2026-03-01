@@ -161,7 +161,8 @@ export default function Results() {
     );
   }
 
-  if (error || !results) {
+  if (error || !results || results.configs.length === 0) {
+    const hasEmptyResults = results && results.configs.length === 0;
     return (
       <div className="flex items-center justify-center h-96">
         <div className="text-center space-y-5">
@@ -171,9 +172,13 @@ export default function Results() {
             </div>
           </div>
           <div className="space-y-2">
-            <p className="text-sm font-medium" data-testid="text-no-results">Results unavailable</p>
+            <p className="text-sm font-medium" data-testid="text-no-results">
+              {hasEmptyResults ? "No results found" : "Results unavailable"}
+            </p>
             <p className="text-xs text-muted-foreground max-w-xs mx-auto">
-              The optimization may have encountered an issue. You can go back and try running it again.
+              {hasEmptyResults
+                ? "The optimization completed but produced no results. This usually happens when the data fetch fails (date range too long) or no parameter combinations met the minimum trade threshold."
+                : "The optimization may have encountered an issue. You can go back and try running it again."}
             </p>
           </div>
           <div className="flex items-center gap-3 justify-center">

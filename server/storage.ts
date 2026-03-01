@@ -192,7 +192,9 @@ export class DatabaseStorage implements IStorage {
 
   getJobResult(id: string): JobResult | undefined {
     const job = this.jobs.get(id);
-    if (!job || job.results.length === 0) return undefined;
+    if (!job) return undefined;
+    const isFinished = job.progress.status === "complete" || job.progress.status === "error";
+    if (job.results.length === 0 && !isFinished) return undefined;
 
     const bestByCombo: Record<string, BacktestResult[]> = {};
     for (const result of job.results) {
