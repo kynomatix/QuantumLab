@@ -1,7 +1,7 @@
 # QuantumLab — Strategy Backtester & Optimizer
 
 ## Overview
-Web application for backtesting and optimizing Pine Script trading strategies against Binance USD-M futures OHLCV data. Dark-themed trading terminal aesthetic with PostgreSQL persistence for building a strategy library over time.
+Web application for backtesting and optimizing Pine Script trading strategies against crypto futures OHLCV data. Dark-themed trading terminal aesthetic with PostgreSQL persistence for building a strategy library over time.
 
 ## Big Picture / Product Vision
 This app is a companion service to **myquantumvault.com** (QuantumVault), a platform for creating and automating TradingView strategies. The purpose of this backtester is to validate and optimize strategies before they go live — preventing capital loss from untested or poorly-tuned strategies.
@@ -18,7 +18,7 @@ This app is a companion service to **myquantumvault.com** (QuantumVault), a plat
 ## Architecture
 - **Frontend**: React + Vite + Tailwind CSS (dark theme), plain textarea for Pine Script, Recharts
 - **Backend**: Express.js (TypeScript)
-- **Database**: PostgreSQL (Drizzle ORM) - strategies, optimization runs, results
+- **Database**: PostgreSQL (Drizzle ORM) - strategies, optimization runs, results, API keys
 - **Data**: Direct Gate.io REST API (https://api.gateio.ws/api/v4/futures/usdt/candlesticks) with Kraken fallback - no API keys needed
 - **Storage**: PostgreSQL for persistence, in-memory for active job state, file system cache for OHLCV data
 
@@ -33,10 +33,12 @@ This app is a companion service to **myquantumvault.com** (QuantumVault), a plat
 8. Strategy library - save/load/manage strategies with persistent optimization history
 9. Historical run results - view past optimization runs and their best configs
 10. Risk Management panel - leverage recommendations, wallet allocation, Kelly criterion, risk of ruin, losing streak analysis, deployment recommendations (accounts for fixed-size trading and auto top-up risks)
+11. Agent-friendly API: `/api/docs` for machine-readable docs, `/api/job/:id/status` for JSON polling
 
 ## Database Schema
-- `strategies` - Saved Pine Script strategies with parsed inputs
-- `optimization_runs` - Records of each optimization run (config, status, dates)
+- `api_keys` - API keys for programmatic access (QuantumVault integration prep). Columns: key, label, userId, active, lastUsedAt
+- `strategies` - Saved Pine Script strategies with parsed inputs. Has nullable `userId` for future per-user isolation
+- `optimization_runs` - Records of each optimization run (config, status, dates). Has nullable `userId`
 - `optimization_results` - Individual results per ticker/timeframe combo per run
 
 Tables defined in `server/schema.ts` (Drizzle ORM). Shared client-compatible types in `shared/schema.ts`.
@@ -63,7 +65,7 @@ Tables defined in `server/schema.ts` (Drizzle ORM). Shared client-compatible typ
 - `client/src/components/RiskManagementPanel.tsx` - Risk management display component
 
 ### Backend
-- `server/routes.ts` - API endpoints (parse, run, progress SSE, results, export, strategies CRUD, runs)
+- `server/routes.ts` - API endpoints (parse, run, progress SSE, results, export, strategies CRUD, runs, docs, status polling)
 - `server/schema.ts` - Drizzle ORM table definitions (server-only, not bundled to client)
 - `server/pine-parser.ts` - Pine Script input declaration parser
 - `server/engine.ts` - Bar-by-bar backtesting engine with squeeze momentum strategy
@@ -77,10 +79,13 @@ Tables defined in `server/schema.ts` (Drizzle ORM). Shared client-compatible typ
 - `shared/schema.ts` - TypeScript interfaces, Zod validation schemas, constants (client-safe, no Drizzle imports)
 
 ## API Endpoints
+- `GET /api/docs` - Machine-readable API documentation (agent-friendly)
 - `GET /api/tickers` - List available tickers
+- `GET /api/timeframes` - List available timeframes
 - `POST /api/parse-pine` - Parse Pine Script, return extracted parameters
 - `POST /api/run-optimization` - Start optimization job (returns jobId, runId)
-- `GET /api/job/:id/progress` - SSE stream of progress updates
+- `GET /api/job/:id/status` - Poll job progress as JSON (agent-friendly, poll every 3-5s)
+- `GET /api/job/:id/progress` - SSE stream of progress updates (browser-friendly)
 - `GET /api/job/:id/results` - Get final optimization results
 - `POST /api/job/:id/cancel` - Cancel running job
 - `GET /api/export/csv/:id` - Download results as CSV
@@ -92,6 +97,7 @@ Tables defined in `server/schema.ts` (Drizzle ORM). Shared client-compatible typ
 - `GET /api/runs` - List optimization runs (optional ?strategyId filter)
 - `GET /api/runs/:id` - Get run details
 - `GET /api/runs/:id/results` - Get saved results for a run
+- `GET /api/runs/:id/job` - Find active in-memory job for a running DB run
 
 ## Theme
 Dark trading terminal aesthetic with:
@@ -110,3 +116,5 @@ Dark trading terminal aesthetic with:
 5. Uses direct Gate.io REST API calls instead of ccxt (56MB saved). Binance/Bybit are geo-blocked from Replit's US servers.
 6. Gate.io API constraint: when using `from` + `to` parameters, do NOT include `limit` (returns 400). Max ~2000 candles per request without limit.
 7. OHLCV data is disk-cached in `cache/` directory to avoid redundant API calls.
+8. `api_keys` table ready for QuantumVault integration. Nullable `userId` on strategies/runs tables for future per-user isolation.
+9. Agent workflow: POST /api/parse-pine → POST /api/strategies → POST /api/run-optimization → poll GET /api/job/:id/status → GET /api/job/:id/results

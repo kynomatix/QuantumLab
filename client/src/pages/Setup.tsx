@@ -195,9 +195,9 @@ export default function Setup() {
   const groupedInputs = parsedResult ? groupByCategory(parsedResult.inputs) : {};
 
   return (
-    <div className="max-w-7xl mx-auto p-6 space-y-6">
+    <div className="max-w-7xl mx-auto p-6 space-y-6" role="main" aria-label="Strategy Setup">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
+        <div className="lg:col-span-2 space-y-6" aria-label="Pine Script Editor">
           <Card className="p-0 overflow-hidden">
             <div className="flex items-center justify-between gap-1 px-4 py-3 border-b border-border/50">
               <div className="flex items-center gap-2 flex-1 min-w-0">

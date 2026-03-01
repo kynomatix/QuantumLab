@@ -37,6 +37,7 @@ export interface IStorage {
 
   createJob(config: OptimizationConfig): Job;
   getJob(id: string): Job | undefined;
+  getJobByRunId(runId: number): Job | undefined;
   updateProgress(id: string, progress: JobProgress): void;
   setResults(id: string, results: BacktestResult[]): void;
   getJobResult(id: string): JobResult | undefined;

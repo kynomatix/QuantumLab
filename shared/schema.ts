@@ -1,7 +1,18 @@
 import { z } from "zod";
 
+export interface ApiKey {
+  id: number;
+  key: string;
+  label: string;
+  userId: string | null;
+  createdAt: string;
+  lastUsedAt: string | null;
+  active: number;
+}
+
 export interface Strategy {
   id: number;
+  userId: string | null;
   name: string;
   description: string | null;
   pineScript: string;
@@ -13,6 +24,7 @@ export interface Strategy {
 
 export interface OptimizationRun {
   id: number;
+  userId: string | null;
   strategyId: number;
   tickers: unknown;
   timeframes: unknown;

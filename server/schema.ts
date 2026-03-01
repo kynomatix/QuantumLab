@@ -3,8 +3,19 @@ import { pgTable, text, integer, real, jsonb, timestamp, serial } from "drizzle-
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+export const apiKeys = pgTable("api_keys", {
+  id: serial("id").primaryKey(),
+  key: text("key").notNull().unique(),
+  label: text("label").notNull(),
+  userId: text("user_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  lastUsedAt: timestamp("last_used_at"),
+  active: integer("active").notNull().default(1),
+});
+
 export const strategies = pgTable("strategies", {
   id: serial("id").primaryKey(),
+  userId: text("user_id"),
   name: text("name").notNull(),
   description: text("description"),
   pineScript: text("pine_script").notNull(),
@@ -16,6 +27,7 @@ export const strategies = pgTable("strategies", {
 
 export const optimizationRuns = pgTable("optimization_runs", {
   id: serial("id").primaryKey(),
+  userId: text("user_id"),
   strategyId: integer("strategy_id").notNull(),
   tickers: jsonb("tickers").notNull(),
   timeframes: jsonb("timeframes").notNull(),
