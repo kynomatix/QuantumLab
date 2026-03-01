@@ -31,6 +31,7 @@ export interface IStorage {
   getRun(id: number): Promise<OptimizationRun | undefined>;
   completeRun(id: number, totalConfigsTested: number): Promise<void>;
   failRun(id: number): Promise<void>;
+  deleteRun(id: number): Promise<void>;
 
   saveResults(runId: number, results: BacktestResult[]): Promise<void>;
   getRunResults(runId: number): Promise<OptResult[]>;
@@ -104,6 +105,11 @@ export class DatabaseStorage implements IStorage {
       status: "failed",
       completedAt: new Date(),
     }).where(eq(optimizationRuns.id, id));
+  }
+
+  async deleteRun(id: number): Promise<void> {
+    await db.delete(optimizationResults).where(eq(optimizationResults.runId, id));
+    await db.delete(optimizationRuns).where(eq(optimizationRuns.id, id));
   }
 
   async saveResults(runId: number, results: BacktestResult[]): Promise<void> {

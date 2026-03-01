@@ -248,6 +248,15 @@ export async function registerRoutes(
     }
   });
 
+  app.delete("/api/runs/:id", async (req: Request, res: Response) => {
+    try {
+      await storage.deleteRun(parseInt(req.params.id));
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.post("/api/run-optimization", async (req: Request, res: Response) => {
     try {
       const parsed = optimizationConfigSchema.safeParse(req.body);

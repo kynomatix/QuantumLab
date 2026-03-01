@@ -47,16 +47,26 @@ async function fetchGateOHLCV(
   timeframe: string,
   fromSec: number,
   toSec: number
-): Promise<any[]> {
+): Promise<{ data: any[] | null; tooOld: boolean }> {
   const interval = mapTimeframeToGate(timeframe);
   const url = `https://api.gateio.ws/api/v4/futures/usdt/candlesticks?contract=${contract}&interval=${interval}&from=${fromSec}&to=${toSec}`;
 
   const res = await fetch(url);
   if (!res.ok) {
     const text = await res.text();
+    if (res.status === 400 && text.includes("too long ago")) {
+      return { data: null, tooOld: true };
+    }
     throw new Error(`Gate.io API error ${res.status}: ${text}`);
   }
-  return res.json();
+  return { data: await res.json(), tooOld: false };
+}
+
+function getEarliestAllowedStart(timeframe: string): number {
+  const tfSeconds = getTimeframeSeconds(timeframe);
+  const maxCandles = 9500;
+  const nowSec = Math.floor(Date.now() / 1000);
+  return nowSec - (tfSeconds * maxCandles);
 }
 
 export async function fetchOHLCV(
@@ -81,16 +91,50 @@ export async function fetchOHLCV(
   onProgress?.(`Fetching ${symbol} ${timeframe} from Gate.io...`);
   log(`Fetching OHLCV for ${contract} ${timeframe} from ${startDate} to ${endDate} via Gate.io`);
 
-  const startSec = Math.floor(new Date(startDate).getTime() / 1000);
+  const requestedStartSec = Math.floor(new Date(startDate).getTime() / 1000);
   const endSec = Math.floor(new Date(endDate).getTime() / 1000);
   const allCandles: OHLCV[] = [];
-  let since = startSec;
+
+  const earliestAllowed = getEarliestAllowedStart(timeframe);
+  let since = requestedStartSec;
+
+  if (since < earliestAllowed) {
+    const earliestDate = new Date(earliestAllowed * 1000).toISOString().split("T")[0];
+    log(`Requested start ${startDate} is too far back for ${timeframe}. Gate.io limit ~9500 candles. Shifting to ${earliestDate}`);
+    onProgress?.(`Date range adjusted: Gate.io only serves ~9500 ${timeframe} candles. Starting from ${earliestDate} instead of ${startDate}`);
+    since = earliestAllowed;
+  }
+
   let page = 0;
+  let consecutiveTooOld = 0;
 
   while (since < endSec) {
     try {
       const batchEnd = Math.min(since + getTimeframeSeconds(timeframe) * 2000, endSec);
-      const raw = await fetchGateOHLCV(contract, timeframe, since, batchEnd);
+      const { data: raw, tooOld } = await fetchGateOHLCV(contract, timeframe, since, batchEnd);
+
+      if (tooOld) {
+        consecutiveTooOld++;
+        log(`Batch starting at ${new Date(since * 1000).toISOString()} too old for Gate.io, skipping forward`);
+        since = Math.min(since + getTimeframeSeconds(timeframe) * 2000, endSec);
+        if (consecutiveTooOld > 5) {
+          const newStart = getEarliestAllowedStart(timeframe);
+          if (newStart < endSec) {
+            log(`Jumping to earliest allowed: ${new Date(newStart * 1000).toISOString()}`);
+            onProgress?.(`Skipping to earliest available data...`);
+            since = newStart;
+            consecutiveTooOld = 0;
+          } else {
+            log(`No data available in requested range for ${symbol} ${timeframe}`);
+            break;
+          }
+        }
+        await new Promise(resolve => setTimeout(resolve, 200));
+        continue;
+      }
+
+      consecutiveTooOld = 0;
+
       if (!raw || raw.length === 0) {
         since = batchEnd;
         continue;
@@ -134,7 +178,7 @@ export async function fetchOHLCV(
     return deduped;
   }
 
-  onProgress?.(`Fetched ${allCandles.length} candles for ${symbol} ${timeframe}`);
+  onProgress?.(`No candle data available for ${symbol} ${timeframe} in the requested date range`);
   return allCandles;
 }
 
