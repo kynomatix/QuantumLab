@@ -3,7 +3,6 @@ import { useLocation, useParams } from "wouter";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -123,14 +122,34 @@ export default function Running() {
           </Button>
         </div>
 
-        <div className="space-y-2">
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>{progress?.percent ?? 0}% complete</span>
-            <span>
-              {progress?.current?.toLocaleString() ?? 0} / {progress?.total?.toLocaleString() ?? 0}
+        <div className="space-y-3" data-testid="progress-bar">
+          <div className="flex items-center justify-between">
+            <span className="text-2xl font-bold font-mono tabular-nums" data-testid="text-percent">
+              {Math.round(progress?.percent ?? 0)}%
+            </span>
+            <span className="text-xs text-muted-foreground font-mono tabular-nums" data-testid="text-configs-count">
+              {progress?.current?.toLocaleString() ?? 0} / {progress?.total?.toLocaleString() ?? 0} configs
             </span>
           </div>
-          <Progress value={progress?.percent ?? 0} className="h-2" data-testid="progress-bar" />
+          <div className="relative w-full h-8 rounded-md bg-muted/30 border border-border/50" role="progressbar" aria-valuenow={Math.round(progress?.percent ?? 0)} aria-valuemin={0} aria-valuemax={100}>
+            <div
+              className="absolute inset-0 rounded-md bg-gradient-to-r from-primary/80 to-primary transition-all duration-500 ease-out"
+              style={{ width: `${Math.round(progress?.percent ?? 0)}%` }}
+            />
+            <div className="absolute inset-0 flex">
+              {Array.from({ length: 20 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="flex-1 border-r border-background/20 last:border-r-0"
+                />
+              ))}
+            </div>
+            <div className="absolute inset-0 rounded-md" style={{
+              backgroundImage: "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.04) 50%, transparent 100%)",
+              backgroundSize: "200% 100%",
+              animation: (progress?.percent ?? 0) > 0 && (progress?.percent ?? 0) < 100 ? "shimmer 2s infinite" : "none",
+            }} />
+          </div>
         </div>
 
         <div className="grid grid-cols-2 gap-4">
