@@ -165,6 +165,13 @@ export class DatabaseStorage implements IStorage {
     return this.jobs.get(id);
   }
 
+  getJobByRunId(runId: number): Job | undefined {
+    for (const job of this.jobs.values()) {
+      if (job.runId === runId) return job;
+    }
+    return undefined;
+  }
+
   updateProgress(id: string, progress: JobProgress): void {
     const job = this.jobs.get(id);
     if (job) {

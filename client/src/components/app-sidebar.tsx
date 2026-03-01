@@ -17,7 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Zap, Settings2, Code2, History, TrendingUp,
-  Clock, CheckCircle2, Activity, ChevronRight,
+  Clock, CheckCircle2, Activity, ChevronRight, Loader2,
 } from "lucide-react";
 import type { Strategy, OptimizationRun } from "@shared/schema";
 
@@ -33,8 +33,9 @@ export function AppSidebar() {
     refetchInterval: 10000,
   });
 
+  const runningRuns = recentRuns?.filter(r => r.status === "running") ?? [];
   const completedRuns = recentRuns?.filter(r => r.status === "complete") ?? [];
-  const latestRuns = completedRuns.slice(0, 8);
+  const latestRuns = [...runningRuns, ...completedRuns].slice(0, 8);
 
   const isActive = (path: string) => {
     if (path === "/") return location === "/" || location.startsWith("/?");
@@ -126,6 +127,7 @@ export function AppSidebar() {
                 {latestRuns.map((run) => {
                   const tickers = (run.tickers as string[]).map(t => t.split("/")[0]).join(", ");
                   const tfs = (run.timeframes as string[]).join(", ");
+                  const isRunning = run.status === "running";
                   const isRunActive = location === `/history/${run.id}`;
                   return (
                     <SidebarMenuItem key={run.id}>
@@ -135,9 +137,16 @@ export function AppSidebar() {
                         data-testid={`nav-run-${run.id}`}
                       >
                         <Link href={`/history/${run.id}`}>
-                          <CheckCircle2 className="w-3.5 h-3.5 text-trading-profit flex-shrink-0" />
+                          {isRunning ? (
+                            <Loader2 className="w-3.5 h-3.5 text-primary animate-spin flex-shrink-0" />
+                          ) : (
+                            <CheckCircle2 className="w-3.5 h-3.5 text-trading-profit flex-shrink-0" />
+                          )}
                           <div className="flex flex-col min-w-0 flex-1">
-                            <span className="text-xs truncate">{tickers}</span>
+                            <span className="text-xs truncate">
+                              {tickers}
+                              {isRunning && <span className="text-primary ml-1">(running)</span>}
+                            </span>
                             <span className="text-[10px] text-muted-foreground truncate">
                               {tfs} — {new Date(run.createdAt).toLocaleDateString()}
                             </span>

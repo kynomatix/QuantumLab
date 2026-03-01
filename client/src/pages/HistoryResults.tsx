@@ -1,5 +1,5 @@
-import { useState, useMemo } from "react";
-import { useParams, Link } from "wouter";
+import { useState, useMemo, useEffect } from "react";
+import { useParams, Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,7 @@ type SortDir = "asc" | "desc";
 
 export default function HistoryResults() {
   const params = useParams<{ runId: string }>();
+  const [, navigate] = useLocation();
   const runId = parseInt(params.runId);
   const [sortKey, setSortKey] = useState<SortKey>("netProfitPercent");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -36,7 +37,24 @@ export default function HistoryResults() {
       if (!res.ok) throw new Error("Run not found");
       return res.json();
     },
+    refetchInterval: (query) => {
+      if (query.state.data?.status === "running") return 3000;
+      return false;
+    },
   });
+
+  useEffect(() => {
+    if (run?.status === "running") {
+      fetch(`/api/runs/${runId}/job`)
+        .then(res => res.ok ? res.json() : null)
+        .then(data => {
+          if (data?.jobId) {
+            navigate(`/running/${data.jobId}`);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [run?.status, runId, navigate]);
 
   const { data: results, isLoading } = useQuery<OptResult[]>({
     queryKey: ["/api/runs", runId, "results"],
@@ -45,6 +63,7 @@ export default function HistoryResults() {
       if (!res.ok) throw new Error("No results");
       return res.json();
     },
+    enabled: run?.status !== "running",
   });
 
   const bestPerCombo = useMemo(() => {
@@ -99,15 +118,34 @@ export default function HistoryResults() {
     );
   }
 
+  if (run?.status === "running") {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="text-center space-y-5">
+          <div className="relative mx-auto w-16 h-16">
+            <div className="absolute inset-0 rounded-full border-4 border-muted/30" />
+            <div className="absolute inset-0 rounded-full border-4 border-t-primary border-r-transparent border-b-transparent border-l-transparent animate-spin" />
+            <div className="absolute inset-2 rounded-full border-4 border-t-transparent border-r-primary/50 border-b-transparent border-l-transparent animate-spin" style={{ animationDirection: "reverse", animationDuration: "1.5s" }} />
+            <Activity className="absolute inset-0 m-auto w-5 h-5 text-primary/70" />
+          </div>
+          <div className="space-y-2">
+            <p className="text-sm font-medium" data-testid="text-run-in-progress">Optimization in progress</p>
+            <p className="text-xs text-muted-foreground">This run is still being processed. Redirecting to the live progress view...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (!results || results.length === 0) {
     return (
       <div className="flex items-center justify-center h-96">
         <div className="text-center space-y-4">
           <XCircle className="w-8 h-8 text-trading-loss mx-auto" />
           <p className="text-sm text-muted-foreground">No results found for this run.</p>
-          <Link href="/strategies">
-            <Button variant="secondary" size="sm" data-testid="button-back-strategies">
-              <ArrowLeft className="w-3 h-3 mr-1" /> Back to Strategies
+          <Link href="/history">
+            <Button variant="secondary" size="sm" data-testid="button-back-history">
+              <ArrowLeft className="w-3 h-3 mr-1" /> Back to Run History
             </Button>
           </Link>
         </div>

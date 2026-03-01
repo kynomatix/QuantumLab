@@ -100,6 +100,13 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/runs/:id/job", (req: Request, res: Response) => {
+    const runId = parseInt(req.params.id);
+    const job = storage.getJobByRunId(runId);
+    if (!job) return res.status(404).json({ error: "No active job for this run" });
+    res.json({ jobId: job.id });
+  });
+
   app.get("/api/runs/:id/results", async (req: Request, res: Response) => {
     try {
       const results = await storage.getRunResults(parseInt(req.params.id));
