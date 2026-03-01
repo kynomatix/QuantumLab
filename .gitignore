@@ -7,3 +7,4 @@ vite.config.ts.*
 attached_assets
 cache
 .local
+replit.md
